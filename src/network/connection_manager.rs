@@ -348,7 +348,10 @@ impl ConnectionManager {
 
     /// Phase 2.1: Cleanup old connection tracking entries
     fn cleanup_old_connections(&self) {
-        let mut last_cleanup = self.last_cleanup.lock().unwrap();
+        let mut last_cleanup = self
+            .last_cleanup
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let now = Instant::now();
 
         // Only cleanup every 10 seconds

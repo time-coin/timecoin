@@ -3,8 +3,6 @@
 //! `NetworkClient::start()` runs phased peer discovery and dials outbound peers.
 //! Per-connection lifecycle is delegated to `ConnectionDriver::drive_outbound`.
 
-#![allow(dead_code)]
-
 use crate::ai::adaptive_reconnection::{AdaptiveReconnectionAI, ReconnectionConfig};
 use crate::blockchain::Blockchain;
 use crate::masternode_registry::MasternodeRegistry;
@@ -169,7 +167,6 @@ impl NetworkClient {
             blockchain: blockchain.clone(),
             peer_manager: peer_manager.clone(),
             peer_registry: peer_registry.clone(),
-            local_ip: local_ip.clone(),
             reconnection_ai: self.reconnection_ai.clone(),
             ip_banlist: self.ip_banlist.clone(),
             tls_config: self.tls_config.clone(),
@@ -988,7 +985,6 @@ struct ConnectionResources {
     blockchain: Arc<Blockchain>,
     peer_manager: Arc<PeerManager>,
     peer_registry: Arc<PeerConnectionRegistry>,
-    local_ip: Option<String>,
     reconnection_ai: Arc<AdaptiveReconnectionAI>,
     ip_banlist: Option<Arc<RwLock<IPBanlist>>>,
     tls_config: Option<Arc<TlsConfig>>,

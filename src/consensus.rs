@@ -4656,15 +4656,16 @@ impl ConsensusEngine {
     ) -> Option<FallbackVoteDecision> {
         let proposal_hash = vote.proposal_hash;
 
-        // Add vote to tracker
-        self.timevote
+        // Add vote to tracker, then calculate weighted totals from the same
+        // entry handle (avoids a redundant lookup and an unwrap on a value
+        // that was just inserted).
+        let mut votes = self
+            .timevote
             .fallback_votes
             .entry(proposal_hash)
-            .or_default()
-            .push(vote);
+            .or_default();
+        votes.push(vote);
 
-        // Calculate weighted totals
-        let votes = self.timevote.fallback_votes.get(&proposal_hash).unwrap();
         let mut approve_weight = 0u64;
         let mut reject_weight = 0u64;
 

@@ -1172,31 +1172,47 @@ impl PeerConnection {
         // If the peer responds with a different genesis hash we permanently ban it and
         // disconnect immediately.  The oneshot result is polled inside the select loop
         // using the same pattern as broadcast_rx.
-        let mut genesis_check_rx: Option<tokio::sync::oneshot::Receiver<bool>> =
-            if let Some(ref blockchain) = config.blockchain {
-                if config.peer_registry.claim_genesis_check(&self.peer_ip) {
-                    let our_genesis_hash = blockchain
-                        .get_block_by_height(0)
-                        .await
-                        .map(|b| b.hash())
-                        .unwrap_or([0u8; 32]);
-                    let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
-                    let registry = Arc::clone(&config.peer_registry);
-                    let peer_ip = self.peer_ip.clone();
-                    tokio::spawn(async move {
-                        let compatible = registry
-                            .verify_genesis_compatibility(&peer_ip, our_genesis_hash)
-                            .await;
-                        registry.release_genesis_check(&peer_ip);
-                        let _ = tx.send(compatible);
-                    });
-                    Some(rx)
-                } else {
-                    None
+        let mut genesis_check_rx: Option<tokio::sync::oneshot::Receiver<bool>> = if let Some(
+            ref blockchain,
+        ) =
+            config.blockchain
+        {
+            if config.peer_registry.claim_genesis_check(&self.peer_ip) {
+                match blockchain.get_block_by_height(0).await {
+                    Ok(block) => {
+                        let our_genesis_hash = block.hash();
+                        let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
+                        let registry = Arc::clone(&config.peer_registry);
+                        let peer_ip = self.peer_ip.clone();
+                        tokio::spawn(async move {
+                            let compatible = registry
+                                .verify_genesis_compatibility(&peer_ip, our_genesis_hash)
+                                .await;
+                            registry.release_genesis_check(&peer_ip);
+                            let _ = tx.send(compatible);
+                        });
+                        Some(rx)
+                    }
+                    Err(e) => {
+                        // We can't read our own genesis block — do NOT fall back to a
+                        // zero hash. That would guarantee a "mismatch" against every
+                        // legitimate peer and permanently genesis-ban them all (this ban
+                        // is not exempt from the whitelist). Skip the check entirely;
+                        // it will retry on the next connection attempt.
+                        tracing::warn!(
+                                "⚠️ Skipping genesis compatibility check with {} — could not read our own genesis block: {}",
+                                self.peer_ip, e
+                            );
+                        config.peer_registry.release_genesis_check(&self.peer_ip);
+                        None
+                    }
                 }
             } else {
                 None
-            };
+            }
+        } else {
+            None
+        };
 
         // Create handler once per connection (reused across all messages)
         let handler = MessageHandler::new(self.peer_ip.clone(), self.direction);
